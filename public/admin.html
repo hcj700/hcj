@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>실적 입력 · 자율성과지표 성과관리</title>
+<link rel="stylesheet" href="assets/style.css">
+<script>
+  (function () { try { var t = localStorage.getItem('aid-dash-theme'); if (t !== 'dark' && t !== 'light') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+</script>
+</head>
+<body>
+<header class="topbar">
+  <div class="in">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">AID</div>
+      <div><b>실적 입력</b><small>자율성과지표 성과관리</small></div>
+    </div>
+    <nav class="nav" aria-label="주 메뉴">
+      <a href="index.html">대시보드로 돌아가기</a>
+    </nav>
+    <div class="tools">
+      <button type="button" id="themeBtn" class="pill-btn" aria-pressed="false">
+        <svg class="ico-moon" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+        <svg class="ico-sun" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/></svg>
+        <span class="txt">다크 모드</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="banner" class="banner" role="status" aria-live="polite"></div>
+
+  <div id="editor" style="display:flex;flex-direction:column;gap:28px">
+    <section class="head">
+      <div>
+        <div class="eyebrow">실적 입력</div>
+        <h1>세부지수 현재값 수정</h1>
+        <div class="meta-line">최종 수정 <span id="lastUpdated">불러오는 중…</span></div>
+      </div>
+    </section>
+
+    <p class="notice">누구나 수정할 수 있는 화면입니다. 저장하면 대시보드에 바로 반영되고, 직전 자료는 자동 백업되어 아래 "변경 이력"에서 되돌릴 수 있습니다. 수정자 이름은 이력에 기록됩니다.</p>
+
+    <section class="card">
+      <div class="card-h"><div><h2>세부지수 현재값</h2><p>값을 모르면 비워 두십시오(미입력으로 표시). 진척률은 입력 즉시 미리 계산됩니다.</p></div></div>
+      <div class="tbl-wrap">
+        <table style="min-width:980px">
+          <thead><tr><th>지표 / 세부지수</th><th class="r">'26 목표</th><th style="width:140px">현재값</th><th style="width:120px">진척률(미리보기)</th><th>관리부서</th><th>비고(산출 근거)</th></tr></thead>
+          <tbody id="subForm"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h">
+        <div><h2>단장 확인 필요 사항</h2><p>대시보드 하단 카드로 표시됩니다.</p></div>
+        <button type="button" class="btn ghost" id="addAction">+ 항목 추가</button>
+      </div>
+      <div id="actionForm" style="display:flex;flex-direction:column;gap:12px"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><div><h2>기본 정보</h2><p>대시보드 상단·하단에 표시되는 정보입니다.</p></div></div>
+      <div class="form-grid" id="metaForm"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-h">
+        <div><h2>변경 이력 · 되돌리기</h2><p>저장·되돌리기 직전의 자료가 최근 50개까지 보관됩니다.</p></div>
+        <button type="button" class="btn ghost" id="histReload">새로고침</button>
+      </div>
+      <div class="hist-list" id="histList"><p class="desc">불러오는 중…</p></div>
+    </section>
+  </div>
+</main>
+
+<div class="sticky-bar" id="saveBar">
+  <label class="f" style="flex-direction:row;align-items:center;gap:8px">수정자
+    <input class="in" id="updatedBy" style="width:200px" placeholder="예: 기획팀 홍길동" maxlength="40" required>
+  </label>
+  <div class="row-actions">
+    <button type="button" class="btn ghost" id="reloadBtn">변경 취소(다시 불러오기)</button>
+    <button type="button" class="btn" id="saveBtn">저장</button>
+  </div>
+</div>
+
+<script src="assets/common.js"></script>
+<script>
+(function () {
+  'use strict';
+  var A = window.AID, esc = A.esc, fmt = A.fmt;
+  var NAME_LS = 'aid-editor-name';
+  var DATA = null, dirty = false;
+
+  function banner(msg, type) {
+    var b = document.getElementById('banner');
+    b.className = msg ? 'banner show ' + (type || '') : 'banner';
+    b.textContent = msg || '';
+    if (msg) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function api(path, body) {
+    return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok || j.ok === false) { var e = new Error(j.error || ('HTTP ' + r.status)); e.status = r.status; throw e; } return j; }); });
+  }
+  function editorName() { return document.getElementById('updatedBy').value.trim(); }
+
+  var META_FIELDS = [
+    ['university', '대학명'], ['unit', '조직명'], ['director', '단장 표시명'], ['yearLabel', '사업연도 표시'],
+    ['periodStart', '측정기간 시작(YYYY-MM-DD)'], ['periodEnd', '측정기간 종료(YYYY-MM-DD)'], ['contact', '문의처'], ['source', '자료 출처']
+  ];
+  var LEVELS = [['red', '빨강(부진)'], ['yellow', '노랑(확인)'], ['green', '초록(우수)'], ['gray', '회색(일반)']];
+
+  function renderMeta() {
+    document.getElementById('metaForm').innerHTML = META_FIELDS.map(function (f) {
+      return '<label class="f">' + esc(f[1]) + '<input class="in" data-meta="' + f[0] + '" value="' + esc(DATA.meta[f[0]] || '') + '"></label>';
+    }).join('');
+  }
+  function renderSubs() {
+    var html = [];
+    DATA.indicators.forEach(function (ind, i) {
+      html.push('<tr class="grp"><td colspan="6" style="font-weight:700;color:var(--strong);background:var(--soft)">' + esc(ind.name) + '</td></tr>');
+      ind.subs.forEach(function (s, j) {
+        var id = 'c_' + i + '_' + j;
+        html.push('<tr>' +
+          '<td><label for="' + id + '" style="font-weight:500">' + esc(s.name) + '(' + esc(s.unit) + ')</label><span class="td-note">비중 ' + s.weight + '% · ' + (s.kind === 'year' ? '학년도 말 측정' : (s.kind === 'point' ? '시점 측정' : '누적 집계')) + '</span></td>' +
+          '<td class="r mono">' + fmt(s.target26, A.autoDec(s.target26)) + '</td>' +
+          '<td><input class="in num" id="' + id + '" data-i="' + i + '" data-j="' + j + '" data-f="current" type="number" min="0" step="any" inputmode="decimal" value="' + (s.current === null || s.current === undefined ? '' : s.current) + '"></td>' +
+          '<td class="mono" data-preview="' + i + '_' + j + '" style="font-weight:600">-</td>' +
+          '<td><input class="in" data-i="' + i + '" data-j="' + j + '" data-f="dept" value="' + esc(s.dept) + '" aria-label="' + esc(s.name) + ' 관리부서"></td>' +
+          '<td><input class="in" data-i="' + i + '" data-j="' + j + '" data-f="note" value="' + esc(s.note) + '" aria-label="' + esc(s.name) + ' 비고"></td></tr>');
+      });
+    });
+    document.getElementById('subForm').innerHTML = html.join('');
+    updatePreview();
+  }
+  function renderActions() {
+    var acts = DATA.actions || [];
+    document.getElementById('actionForm').innerHTML = acts.map(function (a, k) {
+      return '<div class="action" data-k="' + k + '">' +
+        '<div class="form-grid">' +
+        '<label class="f">색상<select class="in" data-a="level">' + LEVELS.map(function (l) { return '<option value="' + l[0] + '"' + (a.level === l[0] ? ' selected' : '') + '>' + l[1] + '</option>'; }).join('') + '</select></label>' +
+        '<label class="f">구분<input class="in" data-a="kind" value="' + esc(a.kind) + '"></label>' +
+        '<label class="f">담당부서<input class="in" data-a="dept" value="' + esc(a.dept) + '"></label>' +
+        '</div>' +
+        '<label class="f">제목<input class="in" data-a="title" value="' + esc(a.title) + '"></label>' +
+        '<label class="f">내용<textarea class="in" data-a="desc">' + esc(a.desc) + '</textarea></label>' +
+        '<div><button type="button" class="btn ghost" data-del="' + k + '">삭제</button></div></div>';
+    }).join('') || '<p class="desc">등록된 항목이 없습니다.</p>';
+  }
+  function readActions() {
+    var list = [];
+    document.querySelectorAll('#actionForm .action').forEach(function (box) {
+      var a = {}; box.querySelectorAll('[data-a]').forEach(function (el) { a[el.dataset.a] = el.value.trim(); }); list.push(a);
+    });
+    return list;
+  }
+  function collect() {
+    var d = JSON.parse(JSON.stringify(DATA));
+    document.querySelectorAll('[data-meta]').forEach(function (el) { d.meta[el.getAttribute('data-meta')] = el.value.trim(); });
+    document.querySelectorAll('#subForm [data-f]').forEach(function (el) {
+      var s = d.indicators[+el.dataset.i].subs[+el.dataset.j], f = el.dataset.f;
+      if (f === 'current') s.current = el.value.trim() === '' ? null : Number(el.value);
+      else s[f] = el.value.trim();
+    });
+    d.actions = readActions().filter(function (a) { return a.title; });
+    d.meta.updatedBy = editorName();
+    return d;
+  }
+  function updatePreview() {
+    var R = A.compute(collect());
+    var COL = { green: 'var(--green)', yellow: 'var(--yellow)', red: 'var(--red)', gray: 'var(--gray)' };
+    R.inds.forEach(function (ind, i) {
+      ind.subs.forEach(function (s, j) {
+        var el = document.querySelector('[data-preview="' + i + '_' + j + '"]');
+        if (el) el.innerHTML = s.has ? '<span class="status"><span class="dot" style="background:' + COL[s.st.key] + '"></span>' + fmt(s.rate, 1) + '%</span>' : '<span style="color:var(--muted)">미입력</span>';
+      });
+    });
+  }
+  function show(d) {
+    DATA = d; dirty = false;
+    document.getElementById('lastUpdated').textContent = (d.meta.updatedAt || '-') + (d.meta.updatedBy ? ' (' + d.meta.updatedBy + ')' : '');
+    renderMeta(); renderSubs(); renderActions();
+  }
+  function load() {
+    return A.loadData().then(show).catch(function (e) { banner('데이터를 불러오지 못했습니다: ' + e.message, 'err'); });
+  }
+
+  // 변경 이력
+  function loadHistory() {
+    var box = document.getElementById('histList');
+    fetch('/api/history', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      var items = (j && j.items) || [];
+      box.innerHTML = items.length ? items.map(function (h) {
+        return '<div class="hist-item"><div><b>' + esc(h.versionUpdatedAt) + ' 버전</b> · ' + esc(h.versionUpdatedBy) +
+          '<small>' + esc(h.savedAt) + ' ' + esc(h.reason) + '</small></div>' +
+          '<button type="button" class="btn ghost" data-restore="' + esc(h.key) + '" data-label="' + esc(h.versionUpdatedAt) + '">이 버전으로 되돌리기</button></div>';
+      }).join('') : '<p class="desc">아직 변경 이력이 없습니다. 첫 저장 후부터 기록됩니다.</p>';
+    }).catch(function () { box.innerHTML = '<p class="desc">이력을 불러오지 못했습니다.</p>'; });
+  }
+
+  document.getElementById('subForm').addEventListener('input', function (ev) { dirty = true; if (ev.target.dataset.f === 'current') updatePreview(); });
+  document.getElementById('editor').addEventListener('input', function () { dirty = true; });
+  document.getElementById('addAction').addEventListener('click', function () {
+    DATA = collect(); DATA.actions = readActions(); DATA.actions.push({ level: 'yellow', kind: '확인', dept: '', title: '새 항목', desc: '' });
+    renderActions(); dirty = true;
+  });
+  document.getElementById('actionForm').addEventListener('click', function (ev) {
+    var k = ev.target.getAttribute('data-del'); if (k === null) return;
+    DATA = collect(); DATA.actions = readActions().filter(function (a, idx) { return String(idx) !== k; });
+    renderActions(); dirty = true;
+  });
+  document.getElementById('reloadBtn').addEventListener('click', function () {
+    if (!dirty || confirm('저장하지 않은 변경 내용이 사라집니다. 다시 불러올까요?')) { banner(''); load(); loadHistory(); }
+  });
+  document.getElementById('histReload').addEventListener('click', loadHistory);
+  document.getElementById('histList').addEventListener('click', function (ev) {
+    var key = ev.target.getAttribute('data-restore'); if (!key) return;
+    var by = editorName();
+    if (!by) { banner('되돌리기 전에 하단의 수정자 이름을 입력해 주십시오.', 'err'); document.getElementById('updatedBy').focus(); return; }
+    if (!confirm(ev.target.getAttribute('data-label') + ' 버전으로 되돌릴까요? 현재 자료는 이력에 백업됩니다.')) return;
+    api('/api/history', { key: key, by: by }).then(function (r) {
+      banner('되돌렸습니다 (' + r.updatedAt + ').', 'ok'); load(); loadHistory();
+    }).catch(function (e) { banner('되돌리지 못했습니다: ' + e.message, 'err'); });
+  });
+  document.getElementById('saveBtn').addEventListener('click', function () {
+    var byEl = document.getElementById('updatedBy');
+    if (!editorName()) { banner('수정자 이름을 입력해 주십시오.', 'err'); byEl.focus(); return; }
+    try { localStorage.setItem(NAME_LS, editorName()); } catch (e) {}
+    var d = collect(), bad = [];
+    d.indicators.forEach(function (i) { i.subs.forEach(function (s) { if (s.current !== null && (isNaN(s.current) || s.current < 0)) bad.push(s.name); }); });
+    if (bad.length) { banner('현재값을 확인해 주십시오: ' + bad.join(', '), 'err'); return; }
+    var btn = this; btn.disabled = true; btn.textContent = '저장 중…';
+    api('/api/data', { data: d, baseRev: Number(DATA.meta.rev || 0) }).then(function (r) {
+      d.meta.updatedAt = r.updatedAt; d.meta.rev = r.rev; show(d);
+      banner('저장되었습니다 (' + r.updatedAt + '). 대시보드에 바로 반영됩니다.', 'ok'); loadHistory();
+    }).catch(function (e) {
+      banner((e.status === 409 ? '' : '저장하지 못했습니다: ') + e.message, 'err');
+    }).then(function () { btn.disabled = false; btn.textContent = '저장'; });
+  });
+  window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+  try { document.getElementById('updatedBy').value = localStorage.getItem(NAME_LS) || ''; } catch (e) {}
+  A.initTheme();
+  load(); loadHistory();
+})();
+</script>
+</body>
+</html>

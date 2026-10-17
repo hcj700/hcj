@@ -1,0 +1,11 @@
+{
+  "name": "aid-performance-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "대구과학대학교 전문대학혁신지원사업단 자율성과지표 성과관리 대시보드 (Netlify 배포용)",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
